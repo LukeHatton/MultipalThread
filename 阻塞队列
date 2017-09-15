@@ -1,0 +1,80 @@
+
+import java.io.File;
+import java.io.FileFilter;
+import java.util.Scanner;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+
+public class Test01 {//使用阻塞队列实现多线程搜索文件夹中的所有带有某种后缀名的文件
+	private static final int QUEUE_SIZE = 100;//队列长度
+	private static final int THREAD_NUM = 10;//并发搜索线程数
+	private static File file;
+	private static String sfName;
+	private static final File DUMMY = new File("");//空文件,用来判断遍历已结束
+	private static  BlockingQueue<File> queue = new ArrayBlockingQueue<>(QUEUE_SIZE);//用来暂存文件的阻塞队列
+	
+	public static void search(File file) throws InterruptedException{
+		File[] files = file.listFiles();
+		for(File f: files){
+			if(f.isDirectory()){
+				search(f);
+			}else
+				queue.put(f);//在队头位置插入新元素,如果队列已满,则线程在此阻塞	take():取出队列队头元素,如果队列为空,线程在此阻塞
+		}
+	}
+	
+	public static void main(String[] args) {
+		Scanner s = new Scanner(System.in);
+		System.out.println("输入要搜索的文件夹路径");
+		file = new File(s.nextLine());
+		System.out.println("输入要搜索的文件类型后缀名");
+		sfName = s.nextLine();
+		s.close();
+		new Thread(new Runnable() {//开启一个搜索线程
+			@Override
+			public void run() {
+				try {
+					search(file);
+					queue.put(DUMMY);//最后添加一个假文件,作为完成搜索的标识
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		}).start();
+		for(int i = 0;i<THREAD_NUM;i++){//创建THREAD_NUM个线程读取队列
+			new Thread(new Runnable() {
+				@Override
+				public void run() {
+					boolean done = false;//是否完成对队列的读取的标识
+					try {
+						while(!done){
+							File newFile = queue.take();
+							if(newFile == DUMMY){
+								done = true;
+								queue.put(DUMMY);//将DUMMY放回
+							}else{
+								if(newFile.getName().toLowerCase().endsWith(sfName)){
+									System.out.println(Thread.currentThread().getName()+" : "+newFile.getName());
+								}
+							}
+						}
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}).start();
+		}
+	}
+}
+
+//过滤器:是文件夹或是后缀名为.java的文件
+class MyFilter implements FileFilter{
+	@Override
+	public boolean accept(File pathname) {
+		if(pathname.isDirectory()||pathname.getName().endsWith(".java")){
+			return true;
+		}
+		return false;
+	}
+	
+}
